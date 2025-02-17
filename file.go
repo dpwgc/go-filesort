@@ -1,7 +1,6 @@
 package filesort
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -44,32 +43,7 @@ func (c *File) Write(filename string, rows []string) error {
 		return err
 	}
 
-	// 创建临时文件
-	_, err = os.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	// 设置为追加写入
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		return err
-	}
-
-	// 按行追加写入
-	writer := bufio.NewWriter(file)
-	for _, row := range rows {
-		_, err = writer.WriteString(row + "\n")
-		if err != nil {
-			return err
-		}
-	}
-	// 写完再刷盘
-	err = writer.Flush()
-	if err != nil {
-		return err
-	}
-	return nil
+	return os.WriteFile(filename, []byte(strings.Join(rows, "\n")), 0644)
 }
 
 func (c *File) Read(filename string) ([]string, error) {
@@ -84,8 +58,8 @@ func (c *File) Read(filename string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	block := strings.Split(string(bytes), "\n")
-	return block[:len(block)-1], err
+
+	return strings.Split(string(bytes), "\n"), err
 }
 
 func (c *File) Close() {
