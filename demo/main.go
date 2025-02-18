@@ -12,12 +12,16 @@ type Log struct {
 
 func main() {
 
-	// 使用 Bulk 函数新建批量排序程序
-	// 使用 Source、Target、OrderBy 函数设置输入输出及排序规则
 	id := 0
-	mySort := filesort.Bulk(Log{}).Source(func() ([]Log, error) {
+
+	// 使用 Bulk 函数新建一个排序流程
+	bulk := filesort.Bulk(Log{})
+
+	// 使用 Source、Target、OrderBy 函数设置输入输出及排序规则
+	bulk.Source(func() ([]Log, error) {
 		// 输入源：输入12w个ID，从1到120000
 		if id >= 120000 {
+			// 终止输入
 			return nil, nil
 		}
 		id++
@@ -36,7 +40,8 @@ func main() {
 	fmt.Println(time.Now(), "-- start")
 
 	// 开始排序，在 ./temp 目录下新建临时文件，每个临时文件至多存储1w行记录
-	err := mySort.Run("./temp", 10000)
+	// 如果需要排序的数据总量没到1w，会直接在内存中排序，不走文件排序逻辑
+	err := bulk.Run("./temp", 10000)
 	if err != nil {
 		panic(err)
 	}

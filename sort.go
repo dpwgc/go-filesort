@@ -2,30 +2,37 @@ package filesort
 
 import (
 	"errors"
+	"github/dpwgc/go-filesort/store"
 	"sort"
 	"strings"
 )
 
 type Sort[T any] struct {
-	file         *File
-	maxBlockSize int
-	blockNum     int
-	compare      func(left T, right T) bool
-	benchmark    T
-	source       func() ([]T, error)
-	target       func(row T) bool
-	limit        bool
-	cursor       int
-	size         int
+	store     store.Store
+	tempKeys  []string
+	blockSize int
+	blockNum  int
+	compare   func(left T, right T) bool
+	benchmark T
+	source    func() ([]T, error)
+	target    func(row T) bool
+	limit     bool
+	cursor    int
+	size      int
+	memory    []T
+	repeat    bool
 }
 
-// Bulk 新建批量排序程序
+// Bulk 新建一个排序流程
 func Bulk[T any](row T) *Sort[T] {
 	return &Sort[T]{
+		blockSize: 0,
+		blockNum:  0,
 		benchmark: row,
 		limit:     false,
 		cursor:    0,
 		size:      0,
+		repeat:    false,
 	}
 }
 
@@ -67,15 +74,26 @@ func (c *Sort[T]) Limit(n ...int) *Sort[T] {
 	return c
 }
 
-// Run 运行批量排序程序
+// Run 运行排序流程，排序过程中产生的数据将临时存储在本地文件中，方法结束后会自动删除数据
 // filepath：临时文件存放文件夹
-// maxBlockSize：每个分块的大小限制
-func (c *Sort[T]) Run(filepath string, maxBlockSize int) error {
+// blockSize：每个分块的大小限制
+func (c *Sort[T]) Run(filepath string, blockSize int) error {
 	if len(filepath) <= 0 {
 		return errors.New("filepath is empty")
 	}
-	if maxBlockSize <= 0 {
-		return errors.New("max block size is empty")
+	if !strings.HasSuffix(filepath, "/") {
+		filepath = filepath + "/"
+	}
+	return c.RunStore(store.NewFile(filepath), blockSize)
+}
+
+// RunStore 运行批量排序流程，这里可以传一个自定义的存储接口
+func (c *Sort[T]) RunStore(store store.Store, blockSize int) error {
+	if store == nil {
+		return errors.New("store is nil")
+	}
+	if blockSize <= 0 {
+		return errors.New("block size is empty")
 	}
 	if c.source == nil {
 		return errors.New("source is nil")
@@ -83,13 +101,14 @@ func (c *Sort[T]) Run(filepath string, maxBlockSize int) error {
 	if c.target == nil {
 		return errors.New("target is nil")
 	}
-	if !strings.HasSuffix(filepath, "/") {
-		filepath = filepath + "/"
+	if c.repeat {
+		return errors.New("can not run repeatedly")
 	}
-	c.file = NewFile(filepath)
-	defer c.file.Close()
-	c.maxBlockSize = maxBlockSize
+	c.store = store
+	c.blockSize = blockSize
+	c.repeat = true
 	err := c.input()
+	defer c.store.Clear(c.tempKeys)
 	if err != nil {
 		return err
 	}
@@ -112,17 +131,18 @@ func (c *Sort[T]) input() error {
 				c.benchmark = row
 				first = false
 			}
-			if len(currentBlock)+1 > c.maxBlockSize {
+			if len(currentBlock)+1 > c.blockSize {
 				// 对这个数据块进行排序
 				sort.Sort(sortBase[T]{currentBlock, c.compare})
 				blockString, err := c.toS(currentBlock)
 				if err != nil {
 					return err
 				}
-				err = c.file.Write(c.file.filepath+nextFilename(), blockString)
+				temp, err := c.store.Write(blockString)
 				if err != nil {
 					return err
 				}
+				c.tempKeys = append(c.tempKeys, temp)
 				c.blockNum = c.blockNum + 1
 				currentBlock = make([]T, 0)
 			}
@@ -133,14 +153,20 @@ func (c *Sort[T]) input() error {
 	if len(currentBlock) > 0 {
 		// 对这个数据块进行排序
 		sort.Sort(sortBase[T]{currentBlock, c.compare})
+		// 如果输入的数据量太小，还没一个数据块大的话，直接在内存里排序就行，不用文件排序了
+		if c.blockNum == 0 {
+			c.memory = currentBlock
+			return nil
+		}
 		blockString, err := c.toS(currentBlock)
 		if err != nil {
 			return err
 		}
-		err = c.file.Write(c.file.filepath+nextFilename(), blockString)
+		temp, err := c.store.Write(blockString)
 		if err != nil {
 			return err
 		}
+		c.tempKeys = append(c.tempKeys, temp)
 		c.blockNum = c.blockNum + 1
 		clear(currentBlock)
 	}
@@ -155,17 +181,39 @@ func (c *Sort[T]) output() error {
 	cursor := 0
 	size := 0
 
+	// 数据量级小，直接在内存排序，输出结果
+	if len(c.memory) > 0 {
+		for _, m := range c.memory {
+			if c.limit {
+				// 如果还未到达指定游标
+				if c.cursor > cursor {
+					cursor++
+					continue
+				}
+				// 超过返回长度限制
+				if size >= c.size {
+					break
+				}
+				size++
+			}
+			// 是否提前结束
+			if !c.target(m) {
+				break
+			}
+		}
+	}
+
 	// 用于记录每个块的当前位置
 	pointers := make([]int, c.blockNum)
 	// 用于标记哪些块已经处理完成
 	complete := make([]bool, c.blockNum)
 
 	// 比较所有块的数据，合并处理
-	for !allComplete(complete) {
+	for !c.allComplete(complete) {
 		var compareValue = c.benchmark // 初始化对比值
 		compareIndex := -1
-		for i, f := range c.file.filenames {
-			bs, err := c.file.Read(f)
+		for i, f := range c.tempKeys {
+			bs, err := c.store.Read(f)
 			if err != nil {
 				return err
 			}
@@ -234,7 +282,7 @@ func (c *Sort[T]) toS(t []T) ([]string, error) {
 	return l, nil
 }
 
-func allComplete(complete []bool) bool {
+func (c *Sort[T]) allComplete(complete []bool) bool {
 	for _, c := range complete {
 		if !c {
 			return false
