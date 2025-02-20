@@ -70,11 +70,11 @@ func (c *File) Clear(filenames []string) {
 func (c *File) nextFilename() string {
 	mutex.Lock()
 	defer mutex.Unlock()
-	if id >= 9223372036854775806 {
-		id = 0
+	if fileId >= 9223372036854775806 {
+		fileId = 0
 	}
-	id = id + 1
-	return fmt.Sprintf("%s%v-%v.sort", c.filepath, c.timestamp, id)
+	fileId = fileId + 1
+	return fmt.Sprintf("%s%v-%v.sort", c.filepath, c.timestamp, fileId)
 }
 
 // 目录不存在时自动创建目录
@@ -90,5 +90,5 @@ func (c *File) autoCreateDir() error {
 	return nil
 }
 
-var id int64 = 0
+var fileId uint64 = 0
 var mutex sync.Mutex
