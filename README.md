@@ -52,7 +52,7 @@ func main() {
 
 	fmt.Println(time.Now(), "-- start")
 
-	// 开始排序，在 ./temp 目录下新建临时文件，每个临时文件至多存储1w行记录
+	// 开始排序，在 ./temp 目录下存储临时数据，运行时会在该目录下新建一个临时的 boltdb 数据库，每个数据块对应一个 key，每个 key 至多存储1w行记录
 	// 如果需要排序的数据总量没到1w，会直接在内存中排序，不走文件排序逻辑
 	err := bulk.Run("./temp", 10000)
 	if err != nil {
@@ -61,6 +61,15 @@ func main() {
 
 	fmt.Println(time.Now(), "-- end")
 }
+```
+
+* 其他运行方式
+
+```
+// 在 ./temp 目录下以文件形式存储临时数据
+bulk.RunFile("./temp", 10000)
+// 自定义临时文件存储方式，可参考下文的'自定义存储'
+bulk.RunStore(myStore, 10000)
 ```
 
 ***
@@ -72,7 +81,9 @@ func main() {
 * Target：设置一个输出目标函数，通过这个函数来按顺序逐个接收排序结果，如果想提前终止接收，可以令这个函数返回 false。
 * OrderBy：设置排序规则，例如 return left.id > right.id 是倒序，return left.id < right.id 是升序。
 * Limit：返回结果分页设置，与 MySQL 的 limit 功能相同，limit 10 或者 limit 0,10。
-* Run：指定一个临时文件目录和分块大小，运行这个排序流程，每个流程只能执行一次 Run。
+* Run：指定一个本地文件目录（底层使用 boltdb 存储）和分块大小，运行这个排序流程，每个流程只能执行一次 Run。
+* RunFile：指定一个本地文件目录（底层使用文件存储）和分块大小，运行这个排序流程。
+* RunStore：指定一个自定义存储实现和分块大小，运行这个排序流程。
 
 *** 
 

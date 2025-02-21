@@ -74,10 +74,20 @@ func (c *Sort[T]) Limit(n ...int) *Sort[T] {
 	return c
 }
 
-// Run 运行排序流程，排序过程中产生的数据将临时存储在本地文件中，方法结束后会自动删除数据
-// filepath：临时文件存放文件夹
+// Run 运行排序流程，排序过程中产生的数据将临时存储在 boltdb 中，方法结束后会自动删除数据
+// filename：boltdb 文件名
 // blockSize：每个分块的大小限制
 func (c *Sort[T]) Run(filepath string, blockSize int) error {
+	if len(filepath) <= 0 {
+		return errors.New("filepath is empty")
+	}
+	if !strings.HasSuffix(filepath, "/") {
+		filepath = filepath + "/"
+	}
+	return c.RunStore(store.NewBolt(filepath), blockSize)
+}
+
+func (c *Sort[T]) RunFile(filepath string, blockSize int) error {
 	if len(filepath) <= 0 {
 		return errors.New("filepath is empty")
 	}
@@ -133,7 +143,7 @@ func (c *Sort[T]) input() error {
 			}
 			if len(currentBlock)+1 > c.blockSize {
 				// 对这个数据块进行排序
-				sort.Sort(sortBase[T]{currentBlock, c.compare})
+				sort.Sort(SortBase[T]{currentBlock, c.compare})
 				blockString, err := c.toS(currentBlock)
 				if err != nil {
 					return err
@@ -152,7 +162,7 @@ func (c *Sort[T]) input() error {
 	// 处理最后一个块
 	if len(currentBlock) > 0 {
 		// 对这个数据块进行排序
-		sort.Sort(sortBase[T]{currentBlock, c.compare})
+		sort.Sort(SortBase[T]{currentBlock, c.compare})
 		// 如果输入的数据量太小，还没一个数据块大的话，直接在内存里排序就行，不用文件排序了
 		if c.blockNum == 0 {
 			c.memory = currentBlock
@@ -290,12 +300,3 @@ func (c *Sort[T]) allComplete(complete []bool) bool {
 	}
 	return true
 }
-
-type sortBase[T any] struct {
-	rows    []T
-	compare func(l, r T) bool
-}
-
-func (s sortBase[T]) Len() int           { return len(s.rows) }
-func (s sortBase[T]) Less(i, j int) bool { return s.compare(s.rows[i], s.rows[j]) }
-func (s sortBase[T]) Swap(i, j int)      { s.rows[i], s.rows[j] = s.rows[j], s.rows[i] }

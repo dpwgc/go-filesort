@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -16,6 +15,9 @@ type File struct {
 }
 
 func NewFile(filepath string) Store {
+	if len(filepath) <= 0 {
+		return nil
+	}
 	return &File{
 		filepath:  filepath,
 		timestamp: time.Now().UnixMilli(),
@@ -61,6 +63,10 @@ func (c *File) Read(filename string) ([]string, error) {
 
 func (c *File) Clear(filenames []string) {
 	for _, v := range filenames {
+		// 只删除 filepath 里的文件
+		if len(v) < 2 || v == c.filepath || !strings.HasPrefix(v, c.filepath) {
+			continue
+		}
 		// fmt.Println("remove", v)
 		_ = os.RemoveAll(v)
 	}
@@ -68,13 +74,7 @@ func (c *File) Clear(filenames []string) {
 
 // 临时存储路径生成
 func (c *File) nextFilename() string {
-	mutex.Lock()
-	defer mutex.Unlock()
-	if fileId >= 9223372036854775806 {
-		fileId = 0
-	}
-	fileId = fileId + 1
-	return fmt.Sprintf("%s%v-%v.sort", c.filepath, c.timestamp, fileId)
+	return fmt.Sprintf("%s%v-%v.sort", c.filepath, c.timestamp, NextID())
 }
 
 // 目录不存在时自动创建目录
@@ -89,6 +89,3 @@ func (c *File) autoCreateDir() error {
 	}
 	return nil
 }
-
-var fileId uint64 = 0
-var mutex sync.Mutex
