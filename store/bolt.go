@@ -7,15 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type Bolt struct {
-	filepath  string
-	filename  string
-	db        *bolt.DB
-	table     []byte
-	timestamp int64
+	filepath string
+	filename string
+	db       *bolt.DB
+	table    []byte
 }
 
 func NewBolt(filepath string) Store {
@@ -23,11 +21,10 @@ func NewBolt(filepath string) Store {
 		return nil
 	}
 	return &Bolt{
-		filepath:  filepath,
-		filename:  "",
-		db:        nil,
-		table:     []byte("sort"),
-		timestamp: time.Now().UnixMilli(),
+		filepath: filepath,
+		filename: "",
+		db:       nil,
+		table:    []byte("sort"),
 	}
 }
 
@@ -52,7 +49,7 @@ func (c *Bolt) Write(rows []string) (string, error) {
 	// 自动创建库表
 	if c.db == nil {
 		// 在 filepath 下建一个新的临时数据库，名字随意，不重复就行
-		c.filename = fmt.Sprintf("%s%s.sort", c.filepath, key)
+		c.filename = fmt.Sprintf("%s%s.sort.db", c.filepath, key)
 		// 创建库
 		c.db, err = bolt.Open(c.filename, 0600, nil)
 		if err != nil {
@@ -99,7 +96,7 @@ func (c *Bolt) Read(key string) ([]string, error) {
 	return strings.Split(string(bytes), "\n"), err
 }
 
-func (c *Bolt) Clear(keys []string) {
+func (c *Bolt) Clear(keys []string) error {
 	/*
 		_ = c.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(c.table)
@@ -113,16 +110,16 @@ func (c *Bolt) Clear(keys []string) {
 	*/
 	// 只删除 filepath 里的文件
 	if len(c.filename) < 2 || c.filename == c.filepath || !strings.HasPrefix(c.filename, c.filepath) {
-		return
+		return errors.New("filepath error")
 	}
 	// fmt.Println(c.dbName)
 	// 直接删除这个数据库
-	_ = os.RemoveAll(c.filename)
+	return os.RemoveAll(c.filename)
 }
 
 // 临时存储路径生成
 func (c *Bolt) nextKey() string {
-	return fmt.Sprintf("%v-%v", c.timestamp, NextID())
+	return NextID()
 }
 
 // 目录不存在时自动创建目录
