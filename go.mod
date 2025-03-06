@@ -1,4 +1,4 @@
-module github/dpwgc/go-filesort
+module github.com/dpwgc/go-filesort
 
 go 1.21.4
 

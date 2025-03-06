@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github/dpwgc/go-filesort"
+	"github.com/dpwgc/go-filesort"
 	"time"
 )
 

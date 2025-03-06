@@ -2,7 +2,7 @@ package filesort
 
 import (
 	"errors"
-	"github/dpwgc/go-filesort/store"
+	"github.com/dpwgc/go-filesort/store"
 	"sort"
 	"strings"
 )

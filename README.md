@@ -7,7 +7,7 @@
 ### 使用方式
 
 ```
-go get github/dpwgc/go-filesort
+go get github.com/dpwgc/go-filesort
 ```
 
 ```go
@@ -15,7 +15,7 @@ package main
 
 import (
 	"fmt"
-	"github/dpwgc/go-filesort"
+	"github.com/dpwgc/go-filesort"
 	"time"
 )
 
